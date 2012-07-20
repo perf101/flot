@@ -160,6 +160,7 @@
             drawOverlay: [],
             shutdown: []
         },
+        cancelled = false,
         plot = this;
 
         // public functions
@@ -224,7 +225,8 @@
         }
 
         function yield(cb) {
-            setTimeout(cb, 0);
+            if (!cancelled)
+                setTimeout(cb, 0);
         }
 
         function executeHooks(hook, args) {
@@ -817,6 +819,8 @@
         }
 
         function shutdown() {
+            cancelled = true;
+
             if (redrawTimeout)
                 clearTimeout(redrawTimeout);
             
