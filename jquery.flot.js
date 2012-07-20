@@ -32,7 +32,7 @@
 
 // the actual Flot code
 (function($) {
-    function Plot(placeholder, data_, options_, plugins) {
+    function Plot(placeholder, data_, options_, plugins, cb_) {
         // data is on the form:
         //   [ series1, series2 ... ]
         // where series is either just the data as [ [x1, y1], [x2, y2], ... ]
@@ -216,9 +216,16 @@
         setupCanvases();
         setData(data_);
         setupGrid();
-        draw();
-        bindEvents();
-        insertLegend();
+        draw(_bindEvents);
+        function _bindEvents() {
+            bindEvents();
+            insertLegend();
+            yield(cb_);
+        }
+
+        function yield(cb) {
+            setTimeout(cb, 0);
+        }
 
         function executeHooks(hook, args) {
             args = [plot].concat(args);
@@ -1452,7 +1459,7 @@
             }
         }
       
-        function draw() {
+        function draw(cb) {
             ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
             var grid = options.grid;
@@ -1466,16 +1473,29 @@
                 drawAxisLabels();
             }
 
-            for (var i = 0; i < series.length; ++i) {
-                executeHooks(hooks.drawSeries, [ctx, series[i]]);
-                drawSeries(series[i]);
+            var i = 0;
+            doiter();
+            function doiter() {
+                if (i < series.length) {
+                    executeHooks(hooks.drawSeries, [ctx, series[i]]);
+                    drawSeries(series[i], function () {
+                        ++i;
+                        doiter();
+                    });
+                } else {
+                    _afterSeries();
+                }
             }
 
-            executeHooks(hooks.draw, [ctx]);
-            
-            if (grid.show && grid.aboveData) {
-                drawGrid();
-                drawAxisLabels();
+            function _afterSeries() {
+                executeHooks(hooks.draw, [ctx]);
+                
+                if (grid.show && grid.aboveData) {
+                    drawGrid();
+                    drawAxisLabels();
+                }
+
+                yield(cb);
             }
         }
 
@@ -1788,16 +1808,26 @@
             ctx.restore();
         }
 
-        function drawSeries(series) {
-            if (series.lines.show)
-                drawSeriesLines(series);
-            if (series.bars.show)
-                drawSeriesBars(series);
-            if (series.points.show)
-                drawSeriesPoints(series);
+        function drawSeries(series, cb) {
+            _seriesLines();
+            function _seriesLines() {
+                if (series.lines.show)
+                    drawSeriesLines(series, _seriesBars);
+                else _seriesBars();
+            }
+            function _seriesBars() {
+                if (series.bars.show)
+                    drawSeriesBars(series, _seriesPoints);
+                else _seriesPoints();
+            }
+            function _seriesPoints() {
+                if (series.points.show)
+                    drawSeriesPoints(series, cb);
+                else cb();
+            }
         }
         
-        function drawSeriesLines(series) {
+        function drawSeriesLines(series, cb) {
             function plotLine(datapoints, xoffset, yoffset, axisx, axisy) {
                 var points = datapoints.points,
                     ps = datapoints.pointsize,
@@ -2049,32 +2079,43 @@
             if (lw > 0)
                 plotLine(series.datapoints, 0, 0, series.xaxis, series.yaxis);
             ctx.restore();
+
+            yield(cb);
         }
 
-        function drawSeriesPoints(series) {
-            function plotPoints(datapoints, radius, fillStyle, offset, shadow, axisx, axisy, symbol) {
+        function drawSeriesPoints(series, cb) {
+            function plotPoints(datapoints, radius, fillStyle, offset, shadow, axisx, axisy, symbol, cb) {
                 var points = datapoints.points, ps = datapoints.pointsize;
 
-                for (var i = 0; i < points.length; i += ps) {
-                    var x = points[i], y = points[i + 1];
-                    if (x == null || x < axisx.min || x > axisx.max || y < axisy.min || y > axisy.max)
-                        continue;
-                    
-                    ctx.beginPath();
-                    x = axisx.p2c(x);
-                    y = axisy.p2c(y) + offset;
-                    if (symbol == "circle")
-                        ctx.arc(x, y, radius, 0, shadow ? Math.PI : Math.PI * 2, false);
-                    else
-                        symbol(ctx, x, y, radius, shadow);
-                    ctx.closePath();
-                    
-                    if (fillStyle) {
-                        ctx.fillStyle = fillStyle;
-                        ctx.fill();
+                var i = 0;
+                function doit() {
+                    for (var j = 0; j < 1000 && i < points.length; j++, i += ps) {
+                        var x = points[i], y = points[i + 1];
+                        if (x == null || x < axisx.min || x > axisx.max || y < axisy.min || y > axisy.max)
+                            continue;
+                        
+                        ctx.beginPath();
+                        x = axisx.p2c(x);
+                        y = axisy.p2c(y) + offset;
+                        if (symbol == "circle")
+                            ctx.arc(x, y, radius, 0, shadow ? Math.PI : Math.PI * 2, false);
+                        else
+                            symbol(ctx, x, y, radius, shadow);
+                        ctx.closePath();
+                        
+                        if (fillStyle) {
+                            ctx.fillStyle = fillStyle;
+                            ctx.fill();
+                        }
+                        ctx.stroke();
                     }
-                    ctx.stroke();
+                    if (i < points.length) {
+                        yield(doit);
+                    } else {
+                        yield(cb);
+                    }
                 }
+                doit();
             }
             
             ctx.save();
@@ -2083,26 +2124,38 @@
             var lw = series.points.lineWidth,
                 sw = series.shadowSize,
                 radius = series.points.radius,
-                symbol = series.points.symbol;
-            if (lw > 0 && sw > 0) {
-                // draw shadow in two steps
-                var w = sw / 2;
+                symbol = series.points.symbol,
+                w = sw / 2;
+
+            if (lw > 0 && sw > 0) _shadow1();
+            else _points();
+
+
+            // draw shadow in two steps
+            function _shadow1() {
                 ctx.lineWidth = w;
                 ctx.strokeStyle = "rgba(0,0,0,0.1)";
                 plotPoints(series.datapoints, radius, null, w + w/2, true,
-                           series.xaxis, series.yaxis, symbol);
-
-                ctx.strokeStyle = "rgba(0,0,0,0.2)";
-                plotPoints(series.datapoints, radius, null, w/2, true,
-                           series.xaxis, series.yaxis, symbol);
+                           series.xaxis, series.yaxis, symbol, _shadow2);
             }
 
-            ctx.lineWidth = lw;
-            ctx.strokeStyle = series.color;
-            plotPoints(series.datapoints, radius,
-                       getFillStyle(series.points, series.color), 0, false,
-                       series.xaxis, series.yaxis, symbol);
-            ctx.restore();
+            function _shadow2() {
+                ctx.strokeStyle = "rgba(0,0,0,0.2)";
+                plotPoints(series.datapoints, radius, null, w/2, true,
+                           series.xaxis, series.yaxis, symbol, _points);
+            }
+
+            function _points() {
+                ctx.lineWidth = lw;
+                ctx.strokeStyle = series.color;
+                plotPoints(series.datapoints, radius,
+                           getFillStyle(series.points, series.color), 0, false,
+                           series.xaxis, series.yaxis, symbol, _finish);
+            }
+            function _finish() {
+                ctx.restore();
+                yield(cb);
+            }
         }
 
         function drawBar(x, y, b, barLeft, barRight, offset, fillStyleCallback, axisx, axisy, c, horizontal, lineWidth) {
@@ -2215,7 +2268,7 @@
             }
         }
         
-        function drawSeriesBars(series) {
+        function drawSeriesBars(series, cb) {
             function plotBars(datapoints, barLeft, barRight, offset, fillStyleCallback, axisx, axisy) {
                 var points = datapoints.points, ps = datapoints.pointsize;
                 
@@ -2236,6 +2289,8 @@
             var fillStyleCallback = series.bars.fill ? function (bottom, top) { return getFillStyle(series.bars, series.color, bottom, top); } : null;
             plotBars(series.datapoints, barLeft, barLeft + series.bars.barWidth, 0, fillStyleCallback, series.xaxis, series.yaxis);
             ctx.restore();
+
+            yield(cb);
         }
 
         function getFillStyle(filloptions, seriesColor, bottom, top) {
@@ -2846,9 +2901,9 @@
         }
     }
 
-    $.plot = function(placeholder, data, options) {
+    $.plot = function(placeholder, data, options, cb) {
         //var t0 = new Date();
-        var plot = new Plot($(placeholder), data, options, $.plot.plugins);
+        var plot = new Plot($(placeholder), data, options, $.plot.plugins, cb);
         //(window.console ? console.log : alert)("time used (msecs): " + ((new Date()).getTime() - t0.getTime()));
         return plot;
     };
