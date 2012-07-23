@@ -225,7 +225,7 @@
         }
 
         function yield(cb) {
-            if (!cancelled)
+            if (!cancelled && typeof cb !== 'undefined')
                 setTimeout(cb, 0);
         }
 
