@@ -231,9 +231,7 @@
                         cb();
                     } catch (e) {
                         // ignore any exceptions if we've been cancelled
-                        if (!cancelled) {
-                            throw e;
-                        }
+                        if (!cancelled) throw e;
                     }
                 }, 0);
             }
