@@ -225,8 +225,16 @@
         }
 
         function yield(cb) {
-            if (!cancelled && typeof cb !== 'undefined')
-                setTimeout(cb, 0);
+            if (!cancelled && typeof cb !== 'undefined') {
+                setTimeout(function () {
+                    try {
+                        cb();
+                    } catch (e) {
+                        // ignore any exceptions if we've been cancelled
+                        if (!cancelled) throw e;
+                    }
+                }, 0);
+            }
         }
 
         function executeHooks(hook, args) {
@@ -829,6 +837,11 @@
             eventHolder.unbind("click", onClick);
             
             executeHooks(hooks.shutdown, [eventHolder]);
+
+            // immediately cut off any functions that are still drawing
+            canvas = null;
+            ctx = null;
+            octx = null;
         }
 
         function setTransformationHelpers(axis) {
