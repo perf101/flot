@@ -2331,7 +2331,7 @@
                 return;
 
             if (options.legend.type != "html") {
-              if (options.legend.type = "canvas")
+              if (options.legend.type == "canvas")
                 insertLegendIntoCanvas(plot);
               return;
             }
@@ -2341,6 +2341,9 @@
             for (var i = 0; i < series.length; ++i) {
                 s = series[i];
                 label = s.label;
+                if (lf)
+                    label = lf(label, s);
+                
                 if (!label)
                     continue;
                 
@@ -2351,9 +2354,6 @@
                     rowStarted = true;
                 }
 
-                if (lf)
-                    label = lf(label, s);
-                
                 fragments.push(
                     '<td class="legendColorBox"><div style="border:1px solid ' + options.legend.labelBoxBorderColor + ';padding:1px"><div style="width:4px;height:0;border:5px solid ' + s.color + ';overflow:hidden"></div></div></td>' +
                     '<td class="legendLabel">' + label + '</td>');
@@ -2572,9 +2572,9 @@
           for (var i = 0; i < series.length; ++i) {
             s = series[i];
             label = s.label;
+            if (lf) label = lf(label, s);
             if (!label) continue;
             num_labels++;
-            if (lf) label = lf(label, s);
             labelWidth = measureText(label);
             if (labelWidth > legendWidth) legendWidth = labelWidth
           }
