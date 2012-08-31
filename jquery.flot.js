@@ -2612,12 +2612,12 @@
             }
           }
           var posx, posy;
-          for (var i = 0; i < series.length; ++i) {
+          for (var i = 0, n = 0; i < series.length; ++i) {
             s = series[i];
             label = s.label;
             if (lf) label = lf(label, s);
             if (!label) continue;
-            posy = y + (i * 18);
+            posy = y + (n * 18);
             ctx.fillStyle = options.legend.labelBoxBorderColor;
             ctx.fillRect(x, posy, 18, 14);
             ctx.fillStyle = "#FFF";
@@ -2627,6 +2627,7 @@
             posx = x + 22;
             posy = posy + fontAscent() + 2;
             fillText(label, posx, posy);
+            ++n;
           }
         } // insertLegendIntoCanvas --- END
 
