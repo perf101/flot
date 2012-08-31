@@ -2615,8 +2615,8 @@
           for (var i = 0; i < series.length; ++i) {
             s = series[i];
             label = s.label;
-            if (!label) continue;
             if (lf) label = lf(label, s);
+            if (!label) continue;
             posy = y + (i * 18);
             ctx.fillStyle = options.legend.labelBoxBorderColor;
             ctx.fillRect(x, posy, 18, 14);
